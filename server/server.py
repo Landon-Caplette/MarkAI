@@ -1,53 +1,57 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import torch
+import torch.nn.functional as F
 import os
-import random
+import sys
+
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+
+from model import GPTLike
 
 app = Flask(__name__)
 CORS(app)
 
-pairs = []
+model = None
+stoi = {}
+itos = {}
+block_size = 128
+vocab_size = 0
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-def load_pairs():
-    global pairs
-    data_path = os.path.join(os.path.dirname(__file__), "..", "datasets", "data.txt")
-    data_path = os.path.normpath(data_path)
-    with open(data_path, "r", encoding="utf-8") as f:
-        lines = [l.strip() for l in f.readlines() if l.strip()]
-    for i in range(len(lines) - 1):
-        pairs.append((lines[i].lower(), lines[i + 1]))
-    print(f"Loaded {len(pairs)} conversation pairs")
+def load_model():
+    global model, stoi, itos, block_size, vocab_size
+    model_path = os.path.join(os.path.dirname(__file__), "..", "models", "mark.pth")
+    model_path = os.path.normpath(model_path)
+    checkpoint = torch.load(model_path, map_location=torch.device("cpu"), weights_only=False)
+    stoi = checkpoint["stoi"]
+    itos = checkpoint["itos"]
+    vocab_size = checkpoint["vocab_size"]
+    block_size = checkpoint["block_size"]
+    model = GPTLike(vocab_size=vocab_size, block_size=block_size, d_model=256, n_heads=8, n_layers=4).to(device)
+    model.load_state_dict(checkpoint["mark"])
+    model.eval()
+    print(f"Mark loaded — vocab size: {vocab_size}, block size: {block_size}")
 
-def find_best_response(message):
-    message = message.lower().strip()
-    msg_words = set(message.split())
+def generate(prompt, max_new_chars=150, temperature=0.8, top_k=40):
+    tokens = [stoi.get(c, 0) for c in prompt]
+    tokens = tokens[-block_size:]
 
-    best_score = 0
-    best_responses = []
+    for _ in range(max_new_chars):
+        context = tokens[-block_size:]
+        input_tensor = torch.tensor([context], dtype=torch.long, device=device)
+        with torch.no_grad():
+            logits = model(input_tensor)
+        logits = logits[0, -1, :] / temperature
+        if top_k > 0:
+            values, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+            logits[logits < values[-1]] = float("-inf")
+        probs = torch.softmax(logits, dim=-1)
+        next_token = torch.multinomial(probs, num_samples=1).item()
+        tokens.append(next_token)
 
-    for prompt, response in pairs:
-        prompt_words = set(prompt.split())
-        if not prompt_words:
-            continue
-        overlap = len(msg_words & prompt_words)
-        score = overlap / max(len(msg_words), len(prompt_words))
-        if score > best_score:
-            best_score = score
-            best_responses = [response]
-        elif score == best_score and best_score > 0:
-            best_responses.append(response)
-
-    if best_responses and best_score > 0.1:
-        return random.choice(best_responses)
-
-    fallbacks = [
-        "i am not sure about that one tell me more",
-        "that is interesting what else is on your mind",
-        "yeah i get what you mean",
-        "i hear you what do you think about it",
-        "honestly i am still learning but i am here to chat",
-    ]
-    return random.choice(fallbacks)
+    output_tokens = tokens[len(tokens) - max_new_chars:]
+    return "".join([itos.get(t, "") for t in output_tokens])
 
 @app.route("/chat", methods=["POST"])
 def chat():
@@ -55,16 +59,18 @@ def chat():
     message = data.get("message", "")
     if not message:
         return jsonify({"error": "No message provided"}), 400
-    reply = find_best_response(message)
+    reply = generate(message)
     return jsonify({"response": reply})
 
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({
         "status": "ok",
-        "pairs_loaded": len(pairs)
+        "model_loaded": model is not None,
+        "vocab_size": vocab_size
     })
 
 if __name__ == "__main__":
-    load_pairs()
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    load_model()
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
