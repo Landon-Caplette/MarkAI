@@ -546,10 +546,10 @@
             <span class="s-icon">🧠</span> What can you help me with?
           </button>
           <button class="suggestion-card" onclick="sendSuggestion(this)">
-            <span class="s-icon">🔬</span> Hi!
+            <span class="s-icon">🔬</span> Hello!
           </button>
           <button class="suggestion-card" onclick="sendSuggestion(this)">
-            <span class="s-icon">🚀</span> what is 1+1
+            <span class="s-icon">🚀</span> Who created you?
           </button>
         </div>
       </div>
@@ -783,7 +783,7 @@
     } catch (err) {
       removeTyping();
       const errMsg = err.message.includes("Failed to fetch")
-        ? `Mark AI is offline. Make sure your API URL is correct and running.`
+        ? `Mark AI is offline.`
         : err.message;
       showError(errMsg);
       const fallback = "Mark AI is currently unable to connect to the server.";
