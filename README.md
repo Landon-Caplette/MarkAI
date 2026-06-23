@@ -8,8 +8,13 @@
 
 MarkAI is a character-level GPT-style language model trained from scratch in PyTorch on a custom dataset. Give it a prompt and it generates a continuation in the style it was trained on. Available through a web demo and a command-line interface.
 
-Features
-
+Features:
 
 Custom GPT-like architecture (multi-head self-attention, positional embeddings)
 Trained from scratch on a custom dataset
+website interface to chat with
+
+in development:
+
+image generation
+android application
