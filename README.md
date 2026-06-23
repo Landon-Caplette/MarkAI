@@ -17,5 +17,5 @@ website interface to chat with
 
 in development:
 
-image generation
-android application
+image generation,
+ android application
