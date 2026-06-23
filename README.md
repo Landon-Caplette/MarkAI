@@ -14,6 +14,7 @@ Custom GPT-like architecture (multi-head self-attention, positional embeddings)
 Trained from scratch on a custom dataset
 website interface to chat with
 
+
 in development:
 
 image generation
