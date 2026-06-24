@@ -787,10 +787,21 @@
       const res = await fetch(MARK_API_URL, { method: "POST", headers, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
       const data = await res.json();
-      const reply = data.response ?? data.reply ?? data.text ?? data.message ?? data.output ?? JSON.stringify(data);
+      const rawReply = data.response ?? data.reply ?? data.text ?? data.message ?? data.output ?? JSON.stringify(data);
       removeTyping();
-      session.messages.push({ role: "assistant", content: reply });
-      appendBubble("assistant", reply);
+
+      const lines = String(rawReply).split(/\r?\n/).map(l => l.trim()).filter(l => l);
+      if (lines.length > 1) {
+        lines.forEach((line, i) => {
+          const role = i % 2 === 0 ? "assistant" : "user";
+          session.messages.push({ role, content: line });
+          appendBubble(role, line);
+        });
+      } else {
+        const replyText = lines[0] || String(rawReply);
+        session.messages.push({ role: "assistant", content: replyText });
+        appendBubble("assistant", replyText);
+      }
     } catch (err) {
       removeTyping();
       const errMsg = err.message.includes("Failed to fetch")
