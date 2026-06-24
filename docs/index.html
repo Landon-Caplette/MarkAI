@@ -357,12 +357,12 @@
     }
 
     .avatar.user-av { background: var(--user-bg); color: #fff; }
-    
-    .avatar.ai-av { 
+
+    .avatar.ai-av {
       background: transparent;
       border: 1px solid var(--border);
     }
-    
+
     .avatar.ai-av img {
       width: 100%;
       height: 100%;
@@ -695,7 +695,7 @@
     if (!animate) row.style.animation = "none";
     const av = document.createElement("div");
     av.className = `avatar ${role === "user" ? "user-av" : "ai-av"}`;
-    
+
     if (role === "user") {
       av.textContent = "Y";
     } else {
@@ -764,7 +764,7 @@
     isLoading = true;
 
     if (currentIdx === -1) {
-      sessions.push({ title: text.slice(0, 36) + (text.length > 36 ? "…") : "", messages: [] });
+      sessions.push({ title: text.slice(0, 36) + (text.length > 36 ? "…" : ""), messages: [] });
       currentIdx = sessions.length - 1;
     }
 
@@ -777,49 +777,38 @@
     localStorage.setItem("mark_sessions", JSON.stringify(sessions));
 
     try {
-      const body = {
-        message: text,
-        history: session.messages.slice(0, -1),
-        session_id: currentIdx,
-      };
-      const headers = { "Content-Type": "application/json" };
-      if (MARK_API_KEY) headers["Authorization"] = `Bearer ${MARK_API_KEY}`;
-      const res = await fetch(MARK_API_URL, { method: "POST", headers, body: JSON.stringify(body) });
+      const res = await fetch(MARK_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(MARK_API_KEY ? { "Authorization": `Bearer ${MARK_API_KEY}` } : {})
+        },
+        body: JSON.stringify({
+          messages: session.messages
+        }),
+        signal: AbortSignal.timeout(30000)
+      });
+
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
+
       const data = await res.json();
-      
-      // Reverted exactly to your original working logic
-      const reply = data.response ?? data.reply ?? data.text ?? data.message ?? data.output ?? JSON.stringify(data);
+      const reply = data.reply || data.message || data.content || "Sorry, I didn't get a response.";
+
       removeTyping();
       session.messages.push({ role: "assistant", content: reply });
       appendBubble("assistant", reply);
-      
+      renderHistory();
+      updateTopbar(session);
+      localStorage.setItem("mark_sessions", JSON.stringify(sessions));
+
     } catch (err) {
       removeTyping();
-      const errMsg = err.message.includes("Failed to fetch")
-        ? `Mark AI is offline.`
-        : err.message;
-      showError(errMsg);
-      const fallback = "Mark AI is currently unable to connect to the server.";
-      session.messages.push({ role: "assistant", content: fallback });
-      appendBubble("assistant", fallback);
+      showError(isOnline ? "Something went wrong: " + err.message : "Mark is offline right now.");
+    } finally {
+      isLoading = false;
+      document.getElementById("sendBtn").disabled = false;
     }
-
-    localStorage.setItem("mark_sessions", JSON.stringify(sessions));
-    updateTopbar(session);
-    renderHistory();
-    document.getElementById("sendBtn").disabled = false;
-    isLoading = false;
-    
-    document.getElementById("inputBox").focus();
   }
-
-  document.addEventListener("DOMContentLoaded", () => {
-    renderHistory();
-    if (sessions.length) {
-      loadSession(sessions.length - 1);
-    }
-  });
 </script>
 </body>
 </html>
